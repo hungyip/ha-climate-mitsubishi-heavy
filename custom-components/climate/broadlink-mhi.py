@@ -23,69 +23,50 @@ from base64 import b64encode, b64decode
 # Definition of an HVAC Cmd Class Object
 class HVAC_CMD:
 	class __IR_SPEC:
-		HVAC_MITSUBISHI_HDR_MARK	= 3400
-		HVAC_MITSUBISHI_HDR_SPACE	= 1750
-		HVAC_MITSUBISHI_BIT_MARK 	= 450
-		HVAC_MITSUBISHI_ONE_SPACE	= 1300
-		HVAC_MISTUBISHI_ZERO_SPACE	= 420
-		HVAC_MITSUBISHI_RPT_MARK	= 440
-		HVAC_MITSUBISHI_RPT_SPACE	= 17100
+		MITSUBISHI_HEAVY_HDR_MARK	= 3400
+		MITSUBISHI_HEAVY_HDR_SPACE	= 1750
+		MITSUBISHI_HEAVY_BIT_MARK 	= 450
+		MITSUBISHI_HEAVY_ONE_SPACE	= 1300
+		MISTUBISHI_HEAVY_ZERO_SPACE	= 420
+		MITSUBISHI_HEAVY_RPT_MARK	= 440
+		MITSUBISHI_HEAVY_RPT_SPACE	= 17100
 	class HVAC_Power:
-		Off 		= 0
-		On  		= 0x20
+		Off 		= 0x08
+		On  		= 0x00
 	class HVAC_Mode:
-		Auto 		= 0b00100000
-		Cold 		= 0b00011000
-		Dry 		= 0b00010000
-		Hot 		= 0b00001000
-	class HVAC_Isee:
-		On			= 0b01000000
-		Off			= 0
+		Auto 		= 0x07
+		Cold 		= 0x06
+		Dry 		= 0x05
+		Hot 		= 0x03
+		Fan		= 0xD4
+		Maint		= 0x06
 	class HVAC_Fan:
-		Auto 		= 0
-		Speed_1 	= 1
-		Speed_2 	= 2
-		Speed_3 	= 3
-		Speed_4 	= 4
-		Speed_5 	= 5
-		Silent 		= 0b00000101
-	class HVAC_Vanne:
-		Auto 		= 0b01000000
-		H1		 	= 0b01001000
-		H2 			= 0b01010000
-		H3		 	= 0b01011000
-		H4		 	= 0b01100000
-		H5			= 0b01101000
-		Swing 		= 0b01111000
-	class HVAC_Wide:
-		Left_end	= 0b00010000
-		Left		= 0b00100000
-		Middle		= 0b00110000
-		Right		= 0b01000000
-		Right_end	= 0b01010000
-		Swing		= 0b10000000
-	class HVAC_Area:
-		Swing		= 0b00000000
-		Left		= 0b01000000
-		Right		= 0b10000000
-		Auto		= 0b11000000
+		Auto 		= 0xE0
+		Speed_1 	= 0xA0
+		Speed_2 	= 0x80
+		Speed_3 	= 0x60
+		HiPower 	= 0x20
+		Econo	 	= 0x00
+	class HVAC_VSwing:
+		Swing	 		= 0x0A
+		Up		 	= 0x02
+		MUp 			= 0x18
+		Middle		 	= 0x10
+		MDown		 	= 0x08
+		Down			= 0x00
+		Stop	 		= 0x1A
+	class HVAC_HS:
+		Stop			= 0xCC  # My Model don't have Horizontal Swing
 	class HVAC_Clean:
-		On			= 0b00000100
-		Off			= 0b00000000
-	class HVAC_Plasma:
-		On			= 0b00000100
-		Off			= 0b00000000
-	class TimeCtrl:
-		OnStart		= 0b00000101
-		OnEnd		= 0b00000011
-		OnStartEnd	= 0b00000111
-		Off			= 0b00000000
+		On			= 0xDF
+		Off			= 0x20
+	#Time Control is not added
 		
 
 	# BROADLINK_DURATION_CONVERSION_FACTOR (Brodlink do not use exact duration in µs but a factor of BDCF)
 	__BDCF = 269/8192 
-	# The Famous Data Sequence I'm starting to know too much...
-	__data 	= [0x23, 0xCB, 0x26, 0x01, 0x00, 0x20,	0x08, 0x06, 0x30, 0x45, 0x67, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x1F]
+	#           0     1     2     3     4     5      6     7     8     9     10
+	__data 	= [0x52, 0xAE, 0xC3, 0x26, 0xD9, 0x11,	0x00, 0x07, 0x00, 0x00, 0x00]
 	# BraodLink Sepecifc Headr for IR command start with a specific code
 	__IR_BroadLink_Code = 0x26
 
@@ -93,9 +74,10 @@ REQUIREMENTS = ['broadlink==0.9.0']
 
 _LOGGER = logging.getLogger(__name__)
 
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_OPERATION_MODE | SUPPORT_FAN_MODE
+SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE | SUPPORT_OPERATION_MODE | SUPPORT_FAN_MODE | SUPPORT_SWING_MODE
 
-CONF_IRCODES_INI = 'ircodes_ini'
+#Config from configuration.yaml
+#CONF_IRCODES_INI = 'ircodes_ini'
 CONF_MIN_TEMP = 'min_temp'
 CONF_MAX_TEMP = 'max_temp'
 CONF_TARGET_TEMP = 'target_temp'
@@ -103,6 +85,8 @@ CONF_TARGET_TEMP_STEP = 'target_temp_step'
 CONF_TEMP_SENSOR = 'temp_sensor'
 CONF_OPERATIONS = 'operations'
 CONF_FAN_MODES = 'fan_modes'
+CONF_SWING_MODES = 'swing_modes'
+CONF_DEFAULT_SWING = 'default_swing'
 CONF_DEFAULT_OPERATION = 'default_operation'
 CONF_DEFAULT_FAN_MODE = 'default_fan_mode'
 
@@ -115,7 +99,7 @@ DEFAULT_MIN_TEMP = 16
 DEFAULT_MAX_TEMP = 30
 DEFAULT_TARGET_TEMP = 20
 DEFAULT_TARGET_TEMP_STEP = 1
-DEFAULT_OPERATION_LIST = [STATE_OFF, STATE_HEAT, STATE_COOL, STATE_AUTO]
+DEFAULT_OPERATION_LIST = [STATE_OFF, STATE_HEAT, STATE_COOL, STATE_DRY, STATE_FAN, STATE_AUTO]
 DEFAULT_FAN_MODE_LIST = ['low', 'mid', 'high', 'auto']
 DEFAULT_OPERATION = 'off'
 DEFAULT_FAN_MODE = 'auto'
