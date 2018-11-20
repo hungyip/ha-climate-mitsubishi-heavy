@@ -12,7 +12,7 @@ import sys
 import math
 
 from homeassistant.components.climate import (ClimateDevice, PLATFORM_SCHEMA, STATE_OFF, STATE_IDLE, STATE_HEAT, STATE_COOL, STATE_DRY, 
-					      STATE_FAN_ONLY, STATE_AUTO, ATTR_OPERATION_MODE, SUPPORT_OPERATION_MODE, SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE)
+                                              STATE_FAN_ONLY, STATE_AUTO, ATTR_OPERATION_MODE, SUPPORT_OPERATION_MODE, SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE)
 from homeassistant.const import (ATTR_UNIT_OF_MEASUREMENT, ATTR_TEMPERATURE, CONF_NAME, CONF_HOST, CONF_MAC, CONF_TIMEOUT, CONF_CUSTOMIZE)
 from homeassistant.helpers.event import (async_track_state_change)
 from homeassistant.core import callback
@@ -22,148 +22,148 @@ from base64 import b64encode, b64decode
 
 # Definition of an HVAC Cmd Class Object
 class HVAC_CMD:
-	class __IR_SPEC:
-		MITSUBISHI_HEAVY_HDR_MARK	= 3200
-		MITSUBISHI_HEAVY_HDR_SPACE	= 1600
-		MITSUBISHI_HEAVY_BIT_MARK 	= 400
-		MITSUBISHI_HEAVY_ONE_SPACE	= 1200
-		MISTUBISHI_HEAVY_ZERO_SPACE	= 400
-	class HVAC_Power:
-		Off 		= 0x08
-		On  		= 0x00
-	class HVAC_Mode:
-		Auto 		= 0x07
-		Cold 		= 0x06
-		Dry 		= 0x05
-		Hot 		= 0x03
-		Fan		= 0xD4
-		Maint		= 0x06
-	class HVAC_Fan:
-		Auto 		= 0xE0
-		Low	 	= 0xA0
-		Mid	 	= 0x80
-		High	 	= 0x60
-		HiPower 	= 0x20
-		Econo	 	= 0x00
-	class HVAC_VSwing:
-		Swing	 		= 0x0A
-		Up		 	= 0x02
-		MUp 			= 0x18
-		Middle		 	= 0x10
-		MDown		 	= 0x08
-		Down			= 0x00
-		Stop	 		= 0x1A
-	class HVAC_HSwing:
-		Stop			= 0xCC  # My Model don't have Horizontal Swing
-	class HVAC_Clean:
-		On			= 0xDF
-		Off			= 0x20
-	#Time Control is not added
-		
+    class __IR_SPEC:
+        MITSUBISHI_HEAVY_HDR_MARK       = 3200
+        MITSUBISHI_HEAVY_HDR_SPACE      = 1600
+        MITSUBISHI_HEAVY_BIT_MARK       = 400
+        MITSUBISHI_HEAVY_ONE_SPACE      = 1200
+        MISTUBISHI_HEAVY_ZERO_SPACE     = 400
+    class HVAC_Power:
+        Off = 0x08
+        On  = 0x00
+    class HVAC_Mode:
+        Auto   = 0x07
+        Cold   = 0x06
+        Dry    = 0x05
+        Hot    = 0x03
+        Fan    = 0xD4
+        Maint  = 0x06
+    class HVAC_Fan:
+        Auto 		= 0xE0
+        Low	 	= 0xA0
+        Mid	 	= 0x80
+        High	 	= 0x60
+        HiPower 	= 0x20
+        Econo	 	= 0x00
+    class HVAC_VSwing:
+        Swing	 		= 0x0A
+        Up		 	= 0x02
+        MUp 			= 0x18
+        Middle		 	= 0x10
+        MDown		 	= 0x08
+        Down			= 0x00
+        Stop	 		= 0x1A
+    class HVAC_HSwing:
+        Stop			= 0xCC  # My Model don't have Horizontal Swing
+    class HVAC_Clean:
+        On			= 0xDF
+        Off			= 0x20
+    
+    #Time Control is not added
 
-	# BROADLINK_DURATION_CONVERSION_FACTOR (Brodlink do not use exact duration in µs but a factor of BDCF)
-	__BDCF = 269/8192 
-	#           0     1     2     3     4     5      6     7     8     9     10
-	__data 	= [0x52, 0xAE, 0xC3, 0x26, 0xD9, 0x11,	0x00, 0x07, 0x00, 0x00, 0x00]
-	# BraodLink Sepecifc Headr for IR command start with a specific code
-	__IR_BroadLink_Code = 0x26
+    # BROADLINK_DURATION_CONVERSION_FACTOR (Brodlink do not use exact duration in µs but a factor of BDCF)
+    __BDCF = 269/8192 
+    #           0     1     2     3     4     5      6     7     8     9     10
+    __data 	= [0x52, 0xAE, 0xC3, 0x26, 0xD9, 0x11,	0x00, 0x07, 0x00, 0x00, 0x00]
+    # BraodLink Sepecifc Headr for IR command start with a specific code
+    __IR_BroadLink_Code = 0x26
 	
-	_log	= True
-	__StrHexCode = ""
+    _log = True
+    __StrHexCode = ""
 
-	# Default Values for the Command
-	Temp = 24
-	Power 		= HVAC_Power
-	Mode 		= HVAC_Mode
-	Fan		= HVAC_Fan
-	VSwing 		= HVAC_VSwing
-	HSwing		= HVAC_HSwing
-	Clean		= HVAC_Clean
+    # Default Values for the Command
+    Temp = 24
+    Power 	= HVAC_Power
+    Mode 	= HVAC_Mode
+    Fan		= HVAC_Fan
+    VSwing 	= HVAC_VSwing
+    HSwing	= HVAC_HSwing
+    Clean	= HVAC_Clean
 
-	def __init__(self):
-		self.Power 		= self.HVAC_Power.Off
-		self.Mode 		= self.HVAC_Mode.Auto
-		self.Fan 		= self.HVAC_Fan.Auto
-		self.VSwing		= self.HVAC_VSwing.Stop
-		self.HSwing		= self.HVAC_HSwing.Stop
-		self.Clean 		= self.HVAC_Clean.Off
-		self._log		= False
+    def __init__(self):
+        self.Power 		= self.HVAC_Power.Off
+        self.Mode 		= self.HVAC_Mode.Auto
+        self.Fan 		= self.HVAC_Fan.Auto
+        self.VSwing		= self.HVAC_VSwing.Stop
+        self.HSwing		= self.HVAC_HSwing.Stop
+        self.Clean 		= self.HVAC_Clean.Off
+        self._log		= False
 		
-	def __val2BrCode(self, valeur, noZero=False):
-	#	val2BrCode: Transform a number to a broadlink Hex string 
-		valeur = int(math.ceil(valeur)) # force int, round up float if needed
-		if (valeur < 256):
-			# Working with just a byte
-			myStr="%0.2x" % valeur
-		else:
-			# Working with a Dword
-			datalen = "%0.04x" % valeur
-			if (noZero):
-				myStr = datalen[2:4] + datalen[0:2]
-			else:
-				myStr = "00" + datalen[2:4] + datalen[0:2]
-		return myStr
+    def __val2BrCode(self, valeur, noZero=False):
+        #	val2BrCode: Transform a number to a broadlink Hex string 
+        valeur = int(math.ceil(valeur)) # force int, round up float if needed
+            if (valeur < 256):
+                # Working with just a byte
+                myStr="%0.2x" % valeur
+            else:
+                # Working with a Dword
+                datalen = "%0.04x" % valeur
+                if (noZero):
+                    myStr = datalen[2:4] + datalen[0:2]
+                else:
+                    myStr = "00" + datalen[2:4] + datalen[0:2]
+            return myStr
 	
-	def __build_cmd(self):
-	#	Build_Cmd: Build the Command applying all parameters defined.  
+    def __build_cmd(self):
+        #	Build_Cmd: Build the Command applying all parameters defined.  
 
-		self.__data[5] 	|= self.HSwing | (self.VSwing & 0b00000010) | self.Clean
-		self.__data[6] 	= ~self.__data[5]
-		self.__data[7] 	|= self.Fan | (self.VSwing & 0b00011000)
-		self.__data[8] 	= ~self.__data[7]
-		self.__data[9]	|= self.Mode | self.Power | self.Temp
-		self.__data[10] = ~self.__data[9]
+        self.__data[5] 	|= self.HSwing | (self.VSwing & 0b00000010) | self.Clean
+        self.__data[6] 	= ~self.__data[5]
+        self.__data[7] 	|= self.Fan | (self.VSwing & 0b00011000)
+        self.__data[8] 	= ~self.__data[7]
+        self.__data[9]	|= self.Mode | self.Power | self.Temp
+        self.__data[10] = ~self.__data[9]
 	
-		StrHexCode = ""
-		for i in range(0, len(self.__data)):
-			mask = 1
-			tmp_StrCode = ""
-			for j in range(0,8):
-				if self.__data[i]& mask != 0:
-					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.MITSUBISHI_HEAVY_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_ONE_SPACE*self.__BDCF)
-				else:
-					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.MITSUBISHI_HEAVY_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MISTUBISHI_ZERO_SPACE*self.__BDCF)
-				mask = mask << 1	
-			StrHexCode = StrHexCode + tmp_StrCode
+        StrHexCode = ""
+        for i in range(0, len(self.__data)):
+            mask = 1
+            tmp_StrCode = ""
+            for j in range(0,8):
+                if self.__data[i]& mask != 0:
+                    tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.MITSUBISHI_HEAVY_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_ONE_SPACE*self.__BDCF)
+                else:
+                    tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.MITSUBISHI_HEAVY_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MISTUBISHI_ZERO_SPACE*self.__BDCF)
+                mask = mask << 1	
+            StrHexCode = StrHexCode + tmp_StrCode
 		
-		# StrHexCode contain the Frame for the HVAC Mitsubishi IR Command requested
+        # StrHexCode contain the Frame for the HVAC Mitsubishi IR Command requested
 		
-		# Exemple using the no repeat function of the Command
-		# Build the start of the BroadLink Command
-		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
-		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 0x00		# Second byte is the repeation number of the Cmd
-		# Build Header Sequence Block of IR HVAC
-		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.MITSUBISHI_HEAVY_HDR_MARK * self.__BDCF)
-		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.MITSUBISHI_HEAVY_HDR_SPACE * self.__BDCF)
-		# Build the Full frame for IR HVAC
-		StrDataCode = StrHeaderTrame + StrHexCode	
-		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
-		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
-		StrHexCodeBR = StrHexCodeBR + StrDataCode
-		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
-		StrHexCodeBR = StrHexCodeBR + "0d05"
-		# Voila, the full BroadLink Command is complete
-		self.__StrHexCode = StrHexCodeBR
+        # Exemple using the no repeat function of the Command
+        # Build the start of the BroadLink Command
+        StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
+        StrHexCodeBR = StrHexCodeBR + "%0.2x" % 0x00		# Second byte is the repeation number of the Cmd
+        # Build Header Sequence Block of IR HVAC
+        StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.MITSUBISHI_HEAVY_HDR_MARK * self.__BDCF)
+        StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.MITSUBISHI_HEAVY_HDR_SPACE * self.__BDCF)
+        # Build the Full frame for IR HVAC
+        StrDataCode = StrHeaderTrame + StrHexCode	
+        # Calculate the lenght of the Cmd data and complete the Broadlink Command Header
+        StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
+        StrHexCodeBR = StrHexCodeBR + StrDataCode
+        # Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
+        StrHexCodeBR = StrHexCodeBR + "0d05"
+        # Voila, the full BroadLink Command is complete
+        self.__StrHexCode = StrHexCodeBR
 
 		
-	def print_cmd(self):
-		# Display to terminal the Built Command to be sent to the Broadlink IR Emitter
-		self.__build_cmd()			# Request to build the Cmd
-		print(self.__StrHexCode)	# Display the Command
+        def print_cmd(self):
+            # Display to terminal the Built Command to be sent to the Broadlink IR Emitter
+            self.__build_cmd()			# Request to build the Cmd
+            print(self.__StrHexCode)	# Display the Command
 
-	def return_broadlink_cmd(self):
-		myhex = self.__StrHexCode
-		myhex = myhex.replace(' ', '').replace('\n', '')
-		myhex = myhex.encode('ascii', 'strict')
-		return binascii.unhexlify(myhex)
+        def return_broadlink_cmd(self):
+            myhex = self.__StrHexCode
+            myhex = myhex.replace(' ', '').replace('\n', '')
+            myhex = myhex.encode('ascii', 'strict')
+            return binascii.unhexlify(myhex)
 	
-	def get_cmd(self): #it was send_cmd before which send out the command, now we would use this to get the cmd instead
-		self.__build_cmd()
-		myhex = self.__StrHexCode
-		myhex = myhex.replace(' ', '').replace('\n', '')
-		myhex = myhex.encode('ascii', 'strict')
-		#device.send_data(binascii.unhexlify(myhex))
-		return binascii.unhexlify(myhex)
+        def get_cmd(self): #it was send_cmd before which send out the command, now we would use this to get the cmd instead
+            self.__build_cmd()
+            myhex = self.__StrHexCode
+            myhex = myhex.replace(' ', '').replace('\n', '')
+            myhex = myhex.encode('ascii', 'strict')
+            #device.send_data(binascii.unhexlify(myhex))
+            return binascii.unhexlify(myhex)
 
 #END HVAC_CMD
 
