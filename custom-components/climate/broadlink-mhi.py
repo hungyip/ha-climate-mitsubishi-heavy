@@ -69,6 +69,141 @@ class HVAC_CMD:
 	__data 	= [0x52, 0xAE, 0xC3, 0x26, 0xD9, 0x11,	0x00, 0x07, 0x00, 0x00, 0x00]
 	# BraodLink Sepecifc Headr for IR command start with a specific code
 	__IR_BroadLink_Code = 0x26
+	
+	_log	= True
+	__StrHexCode = ""
+
+	# Default Values for the Command
+	Temp = 21
+	Power 		= HVAC_Power
+	Mode 		= HVAC_Mode
+	Fan			= HVAC_Fan
+	Isee		= HVAC_Isee
+	Area 		= HVAC_Area
+	Clean		= HVAC_Clean
+	Plasma		= HVAC_Plasma
+
+	def __init__(self):
+		self.Power 		= self.HVAC_Power.Off
+		self.Mode 		= self.HVAC_Mode.Auto
+		self.Fan 		= self.HVAC_Fan.Auto
+		self.Isee		= self.HVAC_Isee.Off
+		self.Vanne		= self.HVAC_Vanne.Auto
+		self.Wide		= self.HVAC_Wide.Swing
+		self.Area		= self.HVAC_Area.Auto
+		self.Clean 		= self.HVAC_Clean.Off
+		self.Plasma 	= self.HVAC_Plasma.Off
+		self.EndTime 	= None
+		self.StartTime  = None
+		self._log		= False
+		
+	def __val2BrCode(self, valeur, noZero=False):
+	#	val2BrCode: Transform a number to a broadlink Hex string 
+		valeur = int(math.ceil(valeur)) # force int, round up float if needed
+		if (valeur < 256):
+			# Working with just a byte
+			myStr="%0.2x" % valeur
+		else:
+			# Working with a Dword
+			datalen = "%0.04x" % valeur
+			if (noZero):
+				myStr = datalen[2:4] + datalen[0:2]
+			else:
+				myStr = "00" + datalen[2:4] + datalen[0:2]
+		return myStr
+	
+	def __build_cmd(self):
+	#	Build_Cmd: Build the Command applying all parameters defined. The cmd is stored in memory, not send. 
+		now = datetime.today()
+		
+		self.__data[5] 	= self.Power
+		self.__data[6] 	= self.Mode | self.Isee
+		self.__data[7] 	= max(16, min(31, self.Temp)) - 16
+		self.__data[8] 	= self.Mode | self.Wide
+		self.__data[9]	= self.Fan | self.Vanne
+		self.__data[9]	= (now.hour*6) + (now.minute//10)
+		self.__data[10] = 0 if self.EndTime is None else ((self.EndTime.hour*6) + (self.EndTime.minute//10))
+		self.__data[11] = 0 if self.StartTime is None else ((self.StartTime.hour*6) + (self.StartTime.minute//10))
+		self.__data[12] = 0 # Time Control not used in this version
+		self.__data[14]	= self.Clean
+		self.__data[15]	= self.Plasma
+		self.__data[17] = sum(self.__data[:-1]) % (0xFF + 1)
+	
+		StrHexCode = ""
+		for i in range(0, len(self.__data)):
+			mask = 1
+			tmp_StrCode = ""
+			for j in range(0,8):
+				if self.__data[i]& mask != 0:
+					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_ONE_SPACE*self.__BDCF)
+				else:
+					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MISTUBISHI_ZERO_SPACE*self.__BDCF)
+				mask = mask << 1	
+			StrHexCode = StrHexCode + tmp_StrCode
+		
+		# StrHexCode contain the Frame for the HVAC Mitsubishi IR Command requested
+		
+		# Exemple using the no repeat function of the Command
+		# Build the start of the BroadLink Command
+		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
+		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 0x00		# Second byte is the repeation number of the Cmd
+		# Build Header Sequence Block of IR HVAC
+		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
+		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
+		# Build the Repeat Sequence Block of IR HVAC 
+		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
+		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
+		# Build the Full frame for IR HVAC
+		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame + StrHeaderTrame + StrHexCode	
+		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
+		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
+		StrHexCodeBR = StrHexCodeBR + StrDataCode
+		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
+		StrHexCodeBR = StrHexCodeBR + "0d05"
+		# Voila, the full BroadLink Command is complete
+		self.__StrHexCode = StrHexCodeBR
+
+		# Exemple using the repeat function of the Command
+		# Build the start of the BroadLink Command
+		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
+		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 2 			# Second byte is the repeation number of the Cmd
+		# Build Header Sequence Block of IR HVAC
+		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
+		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
+		# Build the Repeat Sequence Block of IR HVAC
+		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
+		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
+		# Build the Full frame for IR HVAC
+		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame
+		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
+		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
+		StrHexCodeBR = StrHexCodeBR + StrDataCode
+		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
+		StrHexCodeBR = StrHexCodeBR + "0d05"
+		# Voila, the full BroadLink Command is complete
+		self.__StrHexCode = StrHexCodeBR
+
+		
+	def print_cmd(self):
+		# Display to terminal the Built Command to be sent to the Broadlink IR Emitter
+		self.__build_cmd()			# Request to build the Cmd
+		print(self.__StrHexCode)	# Display the Command
+
+	def return_broadlink_cmd(self):
+		myhex = self.__StrHexCode
+		myhex = myhex.replace(' ', '').replace('\n', '')
+		myhex = myhex.encode('ascii', 'strict')
+		return binascii.unhexlify(myhex)
+	
+	def get_cmd(self): #it was send_cmd before which send out the command, now we would use this to get the cmd instead
+		self.__build_cmd()
+		myhex = self.__StrHexCode
+		myhex = myhex.replace(' ', '').replace('\n', '')
+		myhex = myhex.encode('ascii', 'strict')
+		#device.send_data(binascii.unhexlify(myhex))
+		return binascii.unhexlify(myhex)
+
+#END HVAC_CMD
 
 REQUIREMENTS = ['broadlink==0.9.0']
 
@@ -361,117 +496,3 @@ class BroadlinkIRClimate(ClimateDevice):
 
 		
 		######################################
-	def __val2BrCode(self, valeur, noZero=False):
-	#	val2BrCode: Transform a number to a broadlink Hex string 
-		valeur = int(math.ceil(valeur)) # force int, round up float if needed
-		if (valeur < 256):
-			# Working with just a byte
-			myStr="%0.2x" % valeur
-		else:
-			# Working with a Dword
-			datalen = "%0.04x" % valeur
-			if (noZero):
-				myStr = datalen[2:4] + datalen[0:2]
-			else:
-				myStr = "00" + datalen[2:4] + datalen[0:2]
-		return myStr
-	
-	def __build_cmd(self):
-	#	Build_Cmd: Build the Command applying all parameters defined. The cmd is stored in memory, not send. 
-		now = datetime.today()
-		
-		self.__data[5] 	= self.Power
-		self.__data[6] 	= self.Mode | self.Isee
-		self.__data[7] 	= max(16, min(31, self.Temp)) - 16
-		self.__data[8] 	= self.Mode | self.Wide
-		self.__data[9]	= self.Fan | self.Vanne
-		self.__data[9]	= (now.hour*6) + (now.minute//10)
-		self.__data[10] = 0 if self.EndTime is None else ((self.EndTime.hour*6) + (self.EndTime.minute//10))
-		self.__data[11] = 0 if self.StartTime is None else ((self.StartTime.hour*6) + (self.StartTime.minute//10))
-		self.__data[12] = 0 # Time Control not used in this version
-		self.__data[14]	= self.Clean
-		self.__data[15]	= self.Plasma
-		self.__data[17] = sum(self.__data[:-1]) % (0xFF + 1)
-	
-		StrHexCode = ""
-		for i in range(0, len(self.__data)):
-			mask = 1
-			tmp_StrCode = ""
-			for j in range(0,8):
-				if self.__data[i]& mask != 0:
-					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_ONE_SPACE*self.__BDCF)
-				else:
-					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MISTUBISHI_ZERO_SPACE*self.__BDCF)
-				mask = mask << 1	
-			StrHexCode = StrHexCode + tmp_StrCode
-		
-		# StrHexCode contain the Frame for the HVAC Mitsubishi IR Command requested
-		
-		# Exemple using the no repeat function of the Command
-		# Build the start of the BroadLink Command
-		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
-		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 0x00		# Second byte is the repeation number of the Cmd
-		# Build Header Sequence Block of IR HVAC
-		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
-		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
-		# Build the Repeat Sequence Block of IR HVAC 
-		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
-		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
-		# Build the Full frame for IR HVAC
-		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame + StrHeaderTrame + StrHexCode	
-		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
-		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
-		StrHexCodeBR = StrHexCodeBR + StrDataCode
-		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
-		StrHexCodeBR = StrHexCodeBR + "0d05"
-		# Voila, the full BroadLink Command is complete
-		self.__StrHexCode = StrHexCodeBR
-
-		# Exemple using the repeat function of the Command
-		# Build the start of the BroadLink Command
-		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
-		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 2 			# Second byte is the repeation number of the Cmd
-		# Build Header Sequence Block of IR HVAC
-		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
-		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
-		# Build the Repeat Sequence Block of IR HVAC
-		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
-		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
-		# Build the Full frame for IR HVAC
-		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame
-		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
-		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
-		StrHexCodeBR = StrHexCodeBR + StrDataCode
-		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
-		StrHexCodeBR = StrHexCodeBR + "0d05"
-		# Voila, the full BroadLink Command is complete
-		self.__StrHexCode = StrHexCodeBR
-
-		
-	def print_cmd(self):
-		# Display to terminal the Built Command to be sent to the Broadlink IR Emitter
-		self.__build_cmd()			# Request to build the Cmd
-		print(self.__StrHexCode)	# Display the Command
-
-	def return_broadlink_cmd(self):
-		myhex = self.__StrHexCode
-		myhex = myhex.replace(' ', '').replace('\n', '')
-		myhex = myhex.encode('ascii', 'strict')
-		return binascii.unhexlify(myhex)
-	
-	def send_cmd(self, to_host, to_mac, to_devtype="RM2"):
-		self.__build_cmd()
-		#device = broadlink.rm(host=("192.168.2.96",80), mac=bytearray.fromhex("34 ea 34 8a 35 ee"),devtype="RM2")
-		device = broadlink.rm(host=(to_host,80), mac=bytearray.fromhex(to_mac),devtype=to_devtype)
-		if (self._log):
-			print("Connecting to Broadlink device....")
-		device.auth()
-		time.sleep(1)
-		if (self._log):
-			print("Connected....")
-		time.sleep(1)
-		device.host
-		myhex = self.__StrHexCode
-		myhex = myhex.replace(' ', '').replace('\n', '')
-		myhex = myhex.encode('ascii', 'strict')
-		device.send_data(binascii.unhexlify(myhex))
