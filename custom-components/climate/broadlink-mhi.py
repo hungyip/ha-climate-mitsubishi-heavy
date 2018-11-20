@@ -11,8 +11,8 @@ from datetime import datetime
 import sys
 import math
 
-from homeassistant.components.climate import (ClimateDevice, PLATFORM_SCHEMA, STATE_OFF, STATE_IDLE, STATE_HEAT, STATE_COOL, STATE_AUTO,
-ATTR_OPERATION_MODE, SUPPORT_OPERATION_MODE, SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE)
+from homeassistant.components.climate import (ClimateDevice, PLATFORM_SCHEMA, STATE_OFF, STATE_IDLE, STATE_HEAT, STATE_COOL, STATE_DRY, 
+					      STATE_FAN_ONLY, STATE_AUTO, ATTR_OPERATION_MODE, SUPPORT_OPERATION_MODE, SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE)
 from homeassistant.const import (ATTR_UNIT_OF_MEASUREMENT, ATTR_TEMPERATURE, CONF_NAME, CONF_HOST, CONF_MAC, CONF_TIMEOUT, CONF_CUSTOMIZE)
 from homeassistant.helpers.event import (async_track_state_change)
 from homeassistant.core import callback
@@ -92,14 +92,14 @@ CONF_DEFAULT_FAN_MODE = 'default_fan_mode'
 
 CONF_DEFAULT_OPERATION_FROM_IDLE = 'default_operation_from_idle'
 
-DEFAULT_NAME = 'Broadlink IR Climate'
+DEFAULT_NAME = 'Broadlink IR MHI Climate'
 DEFAULT_TIMEOUT = 10
 DEFAULT_RETRY = 3
-DEFAULT_MIN_TEMP = 16
+DEFAULT_MIN_TEMP = 18
 DEFAULT_MAX_TEMP = 30
-DEFAULT_TARGET_TEMP = 20
+DEFAULT_TARGET_TEMP = 24
 DEFAULT_TARGET_TEMP_STEP = 1
-DEFAULT_OPERATION_LIST = [STATE_OFF, STATE_HEAT, STATE_COOL, STATE_DRY, STATE_FAN, STATE_AUTO]
+DEFAULT_OPERATION_LIST = [STATE_OFF, STATE_HEAT, STATE_COOL, STATE_DRY, STATE_FAN_ONLY, STATE_AUTO]
 DEFAULT_FAN_MODE_LIST = ['low', 'mid', 'high', 'auto']
 DEFAULT_OPERATION = 'off'
 DEFAULT_FAN_MODE = 'auto'
@@ -147,6 +147,7 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     
     import broadlink
     
+#connect to broadlink
     broadlink_device = broadlink.rm((ip_addr, 80), mac_addr, None)
     broadlink_device.timeout = config.get(CONF_TIMEOUT)
 
@@ -154,29 +155,16 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
         broadlink_device.auth()
     except socket.timeout:
         _LOGGER.error("Failed to connect to Broadlink RM Device")
+#finish connecting to broadlink 
     
-    
-    ircodes_ini_file = config.get(CONF_IRCODES_INI)
-    
-    if ircodes_ini_file.startswith("/"):
-        ircodes_ini_file = ircodes_ini_file[1:]
-        
-    ircodes_ini_path = hass.config.path(ircodes_ini_file)
-    
-    if os.path.exists(ircodes_ini_path):
-        ircodes_ini = ConfigParser()
-        ircodes_ini.read(ircodes_ini_path)
-    else:
-        _LOGGER.error("The ini file was not found. (" + ircodes_ini_path + ")")
-        return
-    
+  
     async_add_devices([
-        BroadlinkIRClimate(hass, name, broadlink_device, ircodes_ini, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, default_operation, default_fan_mode, default_operation_from_idle)
+        BroadlinkIRClimate(hass, name, broadlink_device, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, default_operation, default_fan_mode, default_operation_from_idle)
     ])
 
 class BroadlinkIRClimate(ClimateDevice):
 
-    def __init__(self, hass, name, broadlink_device, ircodes_ini, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, default_operation, default_fan_mode, default_operation_from_idle):
+    def __init__(self, hass, name, broadlink_device, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, default_operation, default_fan_mode, default_operation_from_idle):
                  
         """Initialize the Broadlink IR Climate device."""
         self.hass = hass
@@ -200,7 +188,7 @@ class BroadlinkIRClimate(ClimateDevice):
         self._default_operation_from_idle = default_operation_from_idle
                 
         self._broadlink_device = broadlink_device
-        self._commands_ini = ircodes_ini
+        #self._commands_ini = ircodes_ini
         
         if temp_sensor_entity_id:
             async_track_state_change(
@@ -222,7 +210,7 @@ class BroadlinkIRClimate(ClimateDevice):
         else: 
             value = self._current_fan_mode.lower() + "_" + str(int(self._target_temperature)) if not section == 'off' else 'off_command'
         
-        command = self._commands_ini.get(section, value)
+        command = self._commands_ini.get(section, value) #replace this with my code
         
         for retry in range(DEFAULT_RETRY):
             try:
@@ -369,3 +357,121 @@ class BroadlinkIRClimate(ClimateDevice):
             self._target_temperature = state.attributes['temperature']
             self._current_operation = state.attributes['operation_mode']
             self._current_fan_mode = state.attributes['fan_mode']
+	    self._current_swing_mode = state.attributes['swing_mode']
+
+		
+		######################################
+	def __val2BrCode(self, valeur, noZero=False):
+	#	val2BrCode: Transform a number to a broadlink Hex string 
+		valeur = int(math.ceil(valeur)) # force int, round up float if needed
+		if (valeur < 256):
+			# Working with just a byte
+			myStr="%0.2x" % valeur
+		else:
+			# Working with a Dword
+			datalen = "%0.04x" % valeur
+			if (noZero):
+				myStr = datalen[2:4] + datalen[0:2]
+			else:
+				myStr = "00" + datalen[2:4] + datalen[0:2]
+		return myStr
+	
+	def __build_cmd(self):
+	#	Build_Cmd: Build the Command applying all parameters defined. The cmd is stored in memory, not send. 
+		now = datetime.today()
+		
+		self.__data[5] 	= self.Power
+		self.__data[6] 	= self.Mode | self.Isee
+		self.__data[7] 	= max(16, min(31, self.Temp)) - 16
+		self.__data[8] 	= self.Mode | self.Wide
+		self.__data[9]	= self.Fan | self.Vanne
+		self.__data[9]	= (now.hour*6) + (now.minute//10)
+		self.__data[10] = 0 if self.EndTime is None else ((self.EndTime.hour*6) + (self.EndTime.minute//10))
+		self.__data[11] = 0 if self.StartTime is None else ((self.StartTime.hour*6) + (self.StartTime.minute//10))
+		self.__data[12] = 0 # Time Control not used in this version
+		self.__data[14]	= self.Clean
+		self.__data[15]	= self.Plasma
+		self.__data[17] = sum(self.__data[:-1]) % (0xFF + 1)
+	
+		StrHexCode = ""
+		for i in range(0, len(self.__data)):
+			mask = 1
+			tmp_StrCode = ""
+			for j in range(0,8):
+				if self.__data[i]& mask != 0:
+					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_ONE_SPACE*self.__BDCF)
+				else:
+					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MISTUBISHI_ZERO_SPACE*self.__BDCF)
+				mask = mask << 1	
+			StrHexCode = StrHexCode + tmp_StrCode
+		
+		# StrHexCode contain the Frame for the HVAC Mitsubishi IR Command requested
+		
+		# Exemple using the no repeat function of the Command
+		# Build the start of the BroadLink Command
+		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
+		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 0x00		# Second byte is the repeation number of the Cmd
+		# Build Header Sequence Block of IR HVAC
+		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
+		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
+		# Build the Repeat Sequence Block of IR HVAC 
+		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
+		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
+		# Build the Full frame for IR HVAC
+		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame + StrHeaderTrame + StrHexCode	
+		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
+		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
+		StrHexCodeBR = StrHexCodeBR + StrDataCode
+		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
+		StrHexCodeBR = StrHexCodeBR + "0d05"
+		# Voila, the full BroadLink Command is complete
+		self.__StrHexCode = StrHexCodeBR
+
+		# Exemple using the repeat function of the Command
+		# Build the start of the BroadLink Command
+		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
+		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 2 			# Second byte is the repeation number of the Cmd
+		# Build Header Sequence Block of IR HVAC
+		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
+		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
+		# Build the Repeat Sequence Block of IR HVAC
+		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
+		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
+		# Build the Full frame for IR HVAC
+		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame
+		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
+		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
+		StrHexCodeBR = StrHexCodeBR + StrDataCode
+		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
+		StrHexCodeBR = StrHexCodeBR + "0d05"
+		# Voila, the full BroadLink Command is complete
+		self.__StrHexCode = StrHexCodeBR
+
+		
+	def print_cmd(self):
+		# Display to terminal the Built Command to be sent to the Broadlink IR Emitter
+		self.__build_cmd()			# Request to build the Cmd
+		print(self.__StrHexCode)	# Display the Command
+
+	def return_broadlink_cmd(self):
+		myhex = self.__StrHexCode
+		myhex = myhex.replace(' ', '').replace('\n', '')
+		myhex = myhex.encode('ascii', 'strict')
+		return binascii.unhexlify(myhex)
+	
+	def send_cmd(self, to_host, to_mac, to_devtype="RM2"):
+		self.__build_cmd()
+		#device = broadlink.rm(host=("192.168.2.96",80), mac=bytearray.fromhex("34 ea 34 8a 35 ee"),devtype="RM2")
+		device = broadlink.rm(host=(to_host,80), mac=bytearray.fromhex(to_mac),devtype=to_devtype)
+		if (self._log):
+			print("Connecting to Broadlink device....")
+		device.auth()
+		time.sleep(1)
+		if (self._log):
+			print("Connected....")
+		time.sleep(1)
+		device.host
+		myhex = self.__StrHexCode
+		myhex = myhex.replace(' ', '').replace('\n', '')
+		myhex = myhex.encode('ascii', 'strict')
+		device.send_data(binascii.unhexlify(myhex))
