@@ -23,13 +23,11 @@ from base64 import b64encode, b64decode
 # Definition of an HVAC Cmd Class Object
 class HVAC_CMD:
 	class __IR_SPEC:
-		MITSUBISHI_HEAVY_HDR_MARK	= 3400
-		MITSUBISHI_HEAVY_HDR_SPACE	= 1750
-		MITSUBISHI_HEAVY_BIT_MARK 	= 450
-		MITSUBISHI_HEAVY_ONE_SPACE	= 1300
-		MISTUBISHI_HEAVY_ZERO_SPACE	= 420
-		MITSUBISHI_HEAVY_RPT_MARK	= 440
-		MITSUBISHI_HEAVY_RPT_SPACE	= 17100
+		MITSUBISHI_HEAVY_HDR_MARK	= 3200
+		MITSUBISHI_HEAVY_HDR_SPACE	= 1600
+		MITSUBISHI_HEAVY_BIT_MARK 	= 400
+		MITSUBISHI_HEAVY_ONE_SPACE	= 1200
+		MISTUBISHI_HEAVY_ZERO_SPACE	= 400
 	class HVAC_Power:
 		Off 		= 0x08
 		On  		= 0x00
@@ -42,9 +40,9 @@ class HVAC_CMD:
 		Maint		= 0x06
 	class HVAC_Fan:
 		Auto 		= 0xE0
-		Speed_1 	= 0xA0
-		Speed_2 	= 0x80
-		Speed_3 	= 0x60
+		Low	 	= 0xA0
+		Mid	 	= 0x80
+		High	 	= 0x60
 		HiPower 	= 0x20
 		Econo	 	= 0x00
 	class HVAC_VSwing:
@@ -55,7 +53,7 @@ class HVAC_CMD:
 		MDown		 	= 0x08
 		Down			= 0x00
 		Stop	 		= 0x1A
-	class HVAC_HS:
+	class HVAC_HSwing:
 		Stop			= 0xCC  # My Model don't have Horizontal Swing
 	class HVAC_Clean:
 		On			= 0xDF
@@ -74,27 +72,21 @@ class HVAC_CMD:
 	__StrHexCode = ""
 
 	# Default Values for the Command
-	Temp = 21
+	Temp = 24
 	Power 		= HVAC_Power
 	Mode 		= HVAC_Mode
-	Fan			= HVAC_Fan
-	Isee		= HVAC_Isee
-	Area 		= HVAC_Area
+	Fan		= HVAC_Fan
+	VSwing 		= HVAC_VSwing
+	HSwing		= HVAC_HSwing
 	Clean		= HVAC_Clean
-	Plasma		= HVAC_Plasma
 
 	def __init__(self):
 		self.Power 		= self.HVAC_Power.Off
 		self.Mode 		= self.HVAC_Mode.Auto
 		self.Fan 		= self.HVAC_Fan.Auto
-		self.Isee		= self.HVAC_Isee.Off
-		self.Vanne		= self.HVAC_Vanne.Auto
-		self.Wide		= self.HVAC_Wide.Swing
-		self.Area		= self.HVAC_Area.Auto
+		self.VSwing		= self.HVAC_VSwing.Stop
+		self.HSwing		= self.HVAC_HSwing.Stop
 		self.Clean 		= self.HVAC_Clean.Off
-		self.Plasma 	= self.HVAC_Plasma.Off
-		self.EndTime 	= None
-		self.StartTime  = None
 		self._log		= False
 		
 	def __val2BrCode(self, valeur, noZero=False):
@@ -113,21 +105,14 @@ class HVAC_CMD:
 		return myStr
 	
 	def __build_cmd(self):
-	#	Build_Cmd: Build the Command applying all parameters defined. The cmd is stored in memory, not send. 
-		now = datetime.today()
-		
-		self.__data[5] 	= self.Power
-		self.__data[6] 	= self.Mode | self.Isee
-		self.__data[7] 	= max(16, min(31, self.Temp)) - 16
-		self.__data[8] 	= self.Mode | self.Wide
-		self.__data[9]	= self.Fan | self.Vanne
-		self.__data[9]	= (now.hour*6) + (now.minute//10)
-		self.__data[10] = 0 if self.EndTime is None else ((self.EndTime.hour*6) + (self.EndTime.minute//10))
-		self.__data[11] = 0 if self.StartTime is None else ((self.StartTime.hour*6) + (self.StartTime.minute//10))
-		self.__data[12] = 0 # Time Control not used in this version
-		self.__data[14]	= self.Clean
-		self.__data[15]	= self.Plasma
-		self.__data[17] = sum(self.__data[:-1]) % (0xFF + 1)
+	#	Build_Cmd: Build the Command applying all parameters defined.  
+
+		self.__data[5] 	|= self.HSwing | (self.VSwing & 0b00000010) | self.Clean
+		self.__data[6] 	= ~self.__data[5]
+		self.__data[7] 	|= self.Fan | (self.VSwing & 0b00011000)
+		self.__data[8] 	= ~self.__data[7]
+		self.__data[9]	|= self.Mode | self.Power | self.Temp
+		self.__data[10] = ~self.__data[9]
 	
 		StrHexCode = ""
 		for i in range(0, len(self.__data)):
@@ -135,9 +120,9 @@ class HVAC_CMD:
 			tmp_StrCode = ""
 			for j in range(0,8):
 				if self.__data[i]& mask != 0:
-					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_ONE_SPACE*self.__BDCF)
+					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.MITSUBISHI_HEAVY_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_ONE_SPACE*self.__BDCF)
 				else:
-					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.HVAC_MITSUBISHI_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MISTUBISHI_ZERO_SPACE*self.__BDCF)
+					tmp_StrCode = tmp_StrCode + "%0.2x" % int(self.__IR_SPEC.MITSUBISHI_HEAVY_BIT_MARK*self.__BDCF) + "%0.2x" % int(self.__IR_SPEC.HVAC_MISTUBISHI_ZERO_SPACE*self.__BDCF)
 				mask = mask << 1	
 			StrHexCode = StrHexCode + tmp_StrCode
 		
@@ -148,33 +133,10 @@ class HVAC_CMD:
 		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
 		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 0x00		# Second byte is the repeation number of the Cmd
 		# Build Header Sequence Block of IR HVAC
-		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
-		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
-		# Build the Repeat Sequence Block of IR HVAC 
-		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
-		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
+		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.MITSUBISHI_HEAVY_HDR_MARK * self.__BDCF)
+		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.MITSUBISHI_HEAVY_HDR_SPACE * self.__BDCF)
 		# Build the Full frame for IR HVAC
-		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame + StrHeaderTrame + StrHexCode	
-		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
-		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
-		StrHexCodeBR = StrHexCodeBR + StrDataCode
-		# Finalize the BroadLink Command ; must be end by 0x0d, 0x05 per protocol
-		StrHexCodeBR = StrHexCodeBR + "0d05"
-		# Voila, the full BroadLink Command is complete
-		self.__StrHexCode = StrHexCodeBR
-
-		# Exemple using the repeat function of the Command
-		# Build the start of the BroadLink Command
-		StrHexCodeBR = "%0.2x" % self.__IR_BroadLink_Code 	# First byte declare Cmd Type for BroadLink
-		StrHexCodeBR = StrHexCodeBR + "%0.2x" % 2 			# Second byte is the repeation number of the Cmd
-		# Build Header Sequence Block of IR HVAC
-		StrHeaderTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_MARK * self.__BDCF)
-		StrHeaderTrame = StrHeaderTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_HDR_SPACE * self.__BDCF)
-		# Build the Repeat Sequence Block of IR HVAC
-		StrRepeatTrame = self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_MARK * self.__BDCF)
-		StrRepeatTrame = StrRepeatTrame + self.__val2BrCode(self.__IR_SPEC.HVAC_MITSUBISHI_RPT_SPACE * self.__BDCF)
-		# Build the Full frame for IR HVAC
-		StrDataCode = StrHeaderTrame + StrHexCode + StrRepeatTrame
+		StrDataCode = StrHeaderTrame + StrHexCode	
 		# Calculate the lenght of the Cmd data and complete the Broadlink Command Header
 		StrHexCodeBR = StrHexCodeBR + self.__val2BrCode(len(StrDataCode)/2, True)
 		StrHexCodeBR = StrHexCodeBR + StrDataCode
@@ -220,7 +182,7 @@ CONF_TARGET_TEMP_STEP = 'target_temp_step'
 CONF_TEMP_SENSOR = 'temp_sensor'
 CONF_OPERATIONS = 'operations'
 CONF_FAN_MODES = 'fan_modes'
-CONF_SWING_MODES = 'swing_modes'
+CONF_SWING = 'swings'
 CONF_DEFAULT_SWING = 'default_swing'
 CONF_DEFAULT_OPERATION = 'default_operation'
 CONF_DEFAULT_FAN_MODE = 'default_fan_mode'
@@ -235,9 +197,11 @@ DEFAULT_MAX_TEMP = 30
 DEFAULT_TARGET_TEMP = 24
 DEFAULT_TARGET_TEMP_STEP = 1
 DEFAULT_OPERATION_LIST = [STATE_OFF, STATE_HEAT, STATE_COOL, STATE_DRY, STATE_FAN_ONLY, STATE_AUTO]
-DEFAULT_FAN_MODE_LIST = ['low', 'mid', 'high', 'auto']
+DEFAULT_FAN_MODE_LIST = ['auto', 'low', 'mid', 'high', 'hipower', 'econo']
+DEFAULT_SWING_LIST = ['Swing', 'High', 'M-High', 'Middle', 'M-Low', 'Low', 'Stop']
 DEFAULT_OPERATION = 'off'
 DEFAULT_FAN_MODE = 'auto'
+DEFAULT_SWING = 'stop'
 
 CUSTOMIZE_SCHEMA = vol.Schema({
     vol.Optional(CONF_OPERATIONS): vol.All(cv.ensure_list, [cv.string]),
@@ -258,12 +222,13 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_CUSTOMIZE, default={}): CUSTOMIZE_SCHEMA,
     vol.Optional(CONF_DEFAULT_OPERATION, default=DEFAULT_OPERATION): cv.string,
     vol.Optional(CONF_DEFAULT_FAN_MODE, default=DEFAULT_FAN_MODE): cv.string,
+    vol.Optional(CONF_DEFAULT_SWING, default=DEFAULT_SWING): cv.string,
     vol.Optional(CONF_DEFAULT_OPERATION_FROM_IDLE): cv.string
 })
 
 @asyncio.coroutine
 def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
-    """Set up the Broadlink IR Climate platform."""
+    """Set up the Broadlink IR MHI Climate platform."""
     name = config.get(CONF_NAME)
     ip_addr = config.get(CONF_HOST)
     mac_addr = binascii.unhexlify(config.get(CONF_MAC).encode().replace(b':', b''))
@@ -275,8 +240,10 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     temp_sensor_entity_id = config.get(CONF_TEMP_SENSOR)
     operation_list = config.get(CONF_CUSTOMIZE).get(CONF_OPERATIONS, []) or DEFAULT_OPERATION_LIST
     fan_list = config.get(CONF_CUSTOMIZE).get(CONF_FAN_MODES, []) or DEFAULT_FAN_MODE_LIST
+    swing_list = config.get(CONF_CUSTOMIZE).get(CONF_SWINGS, []) or DEFAULT_SWING_LIST
     default_operation = config.get(CONF_DEFAULT_OPERATION)
     default_fan_mode = config.get(CONF_DEFAULT_FAN_MODE)
+    default_swing = config.get(CONF_DEFAULT_SWING)
     
     default_operation_from_idle = config.get(CONF_DEFAULT_OPERATION_FROM_IDLE)
     
@@ -294,12 +261,12 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     
   
     async_add_devices([
-        BroadlinkIRClimate(hass, name, broadlink_device, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, default_operation, default_fan_mode, default_operation_from_idle)
+        BroadlinkIRMHIClimate(hass, name, broadlink_device, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, swing_list, default_operation, default_fan_mode, default_swing, default_operation_from_idle)
     ])
 
-class BroadlinkIRClimate(ClimateDevice):
+class BroadlinkIRMHIClimate(ClimateDevice):
 
-    def __init__(self, hass, name, broadlink_device, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, default_operation, default_fan_mode, default_operation_from_idle):
+    def __init__(self, hass, name, broadlink_device, min_temp, max_temp, target_temp, target_temp_step, temp_sensor_entity_id, operation_list, fan_list, swing_list, default_operation, default_fan_mode, default_swing, default_operation_from_idle):
                  
         """Initialize the Broadlink IR Climate device."""
         self.hass = hass
@@ -316,9 +283,11 @@ class BroadlinkIRClimate(ClimateDevice):
 
         self._current_operation = default_operation
         self._current_fan_mode = default_fan_mode
+	self._current_swing = default_swing
         
         self._operation_list = operation_list
         self._fan_list = fan_list
+	self._swing_list = swing_list
         
         self._default_operation_from_idle = default_operation_from_idle
                 
@@ -335,10 +304,101 @@ class BroadlinkIRClimate(ClimateDevice):
                 self._async_update_current_temp(sensor_state)
     
     
-    def send_ir(self):     
+    def send_ir(self):
+	
+	#create new HVAC instance**
+	MyHVAC = HVAC_CMD()
+	
         section = self._current_operation.lower()
-        
-        if section == 'off':
+
+        if (section == 'off')
+        {
+            MyHVAC.Power = MyHVAC.HVAC_Power.Off
+        }
+
+#	Need to check if climate have ON_OFF
+#        if (if self._current_operation.lower() == 'maintanence' && section == 'off')
+#        {
+#            powerMode = MITSUBISHI_HEAVY_MODE_ON;
+#            cleanMode = MITSUBISHI_HEAVY_ZMP_CLEAN_ON;
+#        }
+
+         if (section == 'auto')
+	     MyHVAC.Mode = MyHVAC.HVAC_Mode.Auto
+             MYHVAC.Temp = 0x80 - (0x10 * self._current_temperature)
+	 elif (section == 'cool')
+             MYHVAC.Mode = MyHVAC.HVAC_Mode.Cold
+         elif (section == 'heat')
+             MYHVAC.Mode = MYHVAC.HVAC_Mode.Hot
+         elif (section == 'dry')
+             MYHVAC.Mode = MYHVAC.HVAC_Mode.Dry
+	 else (section == 'fan_only')
+             MYHVAC.Mode = MYHVAC.HVAC_Mode.Fan
+             MYHVAC.Temp = 0
+#        else (section == 'maint')
+#      //Specify maintenance mode to activate clean mode
+#            MYHVAC.Mode = MYHVAC.HVAC_Mode.Maint
+         fanspeed = self._current_fan_mode.lower()
+         
+         if (fanspeed == '
+  switch (fanSpeedCmd)
+  {
+    case FAN_AUTO:
+      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN_AUTO;
+      break;
+    case FAN_1:
+      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN1;
+      break;
+    case FAN_2:
+      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN2;
+      break;
+    case FAN_3:
+      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN3;
+      break;
+    case FAN_4: //Map FAN_4 to HiPower
+      fanSpeed = MITSUBISHI_HEAVY_ZMP_HIPOWER;
+      break;
+    case FAN_5: //Map FAN_5 to Econo
+      fanSpeed = MITSUBISHI_HEAVY_ZMP_ECONO;
+      break;
+  }
+
+  if (silentModeCmd)
+  {
+  	// Silent mode doesn't exist on ZMP model, use ECONO mode instead
+    fanSpeed = MITSUBISHI_HEAVY_ZMP_SILENT_ON;
+  }
+  
+  if ( temperatureCmd > 17 && temperatureCmd < 31)
+  {
+    temperature = (~((temperatureCmd - 17) << 4)) & 0xF0;
+  }
+
+  switch (swingVCmd)
+  {
+    case VDIR_MANUAL:
+      swingV = MITSUBISHI_HEAVY_ZMP_VS_STOP;
+      break;
+    case VDIR_SWING:
+      swingV = MITSUBISHI_HEAVY_ZMP_VS_SWING;
+      break;
+    case VDIR_UP:
+      swingV = MITSUBISHI_HEAVY_ZMP_VS_UP;
+      break;
+    case VDIR_MUP:
+      swingV = MITSUBISHI_HEAVY_ZMP_VS_MUP;
+      break;
+    case VDIR_MIDDLE:
+      swingV = MITSUBISHI_HEAVY_ZMP_VS_MIDDLE;
+      break;
+    case VDIR_MDOWN:
+      swingV = MITSUBISHI_HEAVY_ZMP_VS_MDOWN;
+      break;
+    case VDIR_DOWN:
+      swingV = MITSUBISHI_HEAVY_ZMP_VS_DOWN;
+      break;	
+
+	  if section == 'off':
             value = 'off_command'
         elif section == 'idle':
             value = 'idle_command'
@@ -494,5 +554,4 @@ class BroadlinkIRClimate(ClimateDevice):
             self._current_fan_mode = state.attributes['fan_mode']
 	    self._current_swing_mode = state.attributes['swing_mode']
 
-		
-		######################################
+
