@@ -12,7 +12,7 @@ import sys
 import math
 
 from homeassistant.components.climate import (ClimateDevice, PLATFORM_SCHEMA, STATE_OFF, STATE_IDLE, STATE_HEAT, STATE_COOL, STATE_DRY, 
-					      STATE_FAN_ONLY, STATE_AUTO, ATTR_OPERATION_MODE, SUPPORT_OPERATION_MODE, SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE)
+					      STATE_FAN_ONLY, STATE_AUTO, ATTR_OPERATION_MODE, SUPPORT_OPERATION_MODE, SUPPORT_TARGET_TEMPERATURE, SUPPORT_FAN_MODE, SUPPORT_SWING_MODE)
 from homeassistant.const import (ATTR_UNIT_OF_MEASUREMENT, ATTR_TEMPERATURE, CONF_NAME, CONF_HOST, CONF_MAC, CONF_TIMEOUT, CONF_CUSTOMIZE)
 from homeassistant.helpers.event import (async_track_state_change)
 from homeassistant.core import callback
@@ -198,7 +198,7 @@ DEFAULT_TARGET_TEMP = 24
 DEFAULT_TARGET_TEMP_STEP = 1
 DEFAULT_OPERATION_LIST = [STATE_OFF, STATE_HEAT, STATE_COOL, STATE_DRY, STATE_FAN_ONLY, STATE_AUTO]
 DEFAULT_FAN_MODE_LIST = ['auto', 'low', 'mid', 'high', 'hipower', 'econo']
-DEFAULT_SWING_LIST = ['Swing', 'High', 'M-High', 'Middle', 'M-Low', 'Low', 'Stop']
+DEFAULT_SWING_LIST = ['Swing', 'Up', 'M-Up', 'Middle', 'M-Down', 'Down', 'Manual']
 DEFAULT_OPERATION = 'off'
 DEFAULT_FAN_MODE = 'auto'
 DEFAULT_SWING = 'stop'
@@ -325,91 +325,60 @@ class BroadlinkIRMHIClimate(ClimateDevice):
 
          if (section == 'auto')
 	     MyHVAC.Mode = MyHVAC.HVAC_Mode.Auto
-             MYHVAC.Temp = 0x80 - (0x10 * self._current_temperature)
+             MyHVAC.Temp = 0x80 - (0x10 * self._current_temperature)
 	 elif (section == 'cool')
-             MYHVAC.Mode = MyHVAC.HVAC_Mode.Cold
+             MyHVAC.Mode = MyHVAC.HVAC_Mode.Cold
          elif (section == 'heat')
-             MYHVAC.Mode = MYHVAC.HVAC_Mode.Hot
+             MyHVAC.Mode = MyHVAC.HVAC_Mode.Hot
          elif (section == 'dry')
-             MYHVAC.Mode = MYHVAC.HVAC_Mode.Dry
-	 else (section == 'fan_only')
-             MYHVAC.Mode = MYHVAC.HVAC_Mode.Fan
-             MYHVAC.Temp = 0
+             MyHVAC.Mode = MyHVAC.HVAC_Mode.Dry
+	 elif (section == 'fan_only')
+             MyHVAC.Mode = MyHVAC.HVAC_Mode.Fan
+             MyHVAC.Temp = 0
 #        else (section == 'maint')
 #      //Specify maintenance mode to activate clean mode
 #            MYHVAC.Mode = MYHVAC.HVAC_Mode.Maint
          fanspeed = self._current_fan_mode.lower()
          
-         if (fanspeed == '
-  switch (fanSpeedCmd)
-  {
-    case FAN_AUTO:
-      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN_AUTO;
-      break;
-    case FAN_1:
-      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN1;
-      break;
-    case FAN_2:
-      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN2;
-      break;
-    case FAN_3:
-      fanSpeed = MITSUBISHI_HEAVY_ZMP_FAN3;
-      break;
-    case FAN_4: //Map FAN_4 to HiPower
-      fanSpeed = MITSUBISHI_HEAVY_ZMP_HIPOWER;
-      break;
-    case FAN_5: //Map FAN_5 to Econo
-      fanSpeed = MITSUBISHI_HEAVY_ZMP_ECONO;
-      break;
-  }
+         if (fanspeed == 'auto')
+             MyHVAC.Fan = MyHVAC.HVAC_Fan.Auto
+         elif (fanspeed == 'low')
+	     MyHVAC.Fan = MyHVAC.HVAC_Fan.Low
+         elif (fanspeed == 'med')
+	     MyHVAC.Fan = MyHVAC.HVAC_Fan.Med
+         elif (fanspeed == 'high')
+	     MyHVAC.Fan = MyHVAC.HVAC_Fan.High
+         elif (fanspeed == 'hipower')
+	     MyHVAC.Fan = MyHVAC.HVAC_Fan.HiPower
+         elif (fanspeed == 'econo')
+	     MyHVAC.Fan = MyHVAC.HVAC_Fan.Econo
 
-  if (silentModeCmd)
-  {
-  	// Silent mode doesn't exist on ZMP model, use ECONO mode instead
-    fanSpeed = MITSUBISHI_HEAVY_ZMP_SILENT_ON;
-  }
-  
-  if ( temperatureCmd > 17 && temperatureCmd < 31)
-  {
-    temperature = (~((temperatureCmd - 17) << 4)) & 0xF0;
-  }
+         temperature = self._target_temperature 
+         if ( temperature > 17 && temperature < 31)
+             MyHVAC.Temp = (~((temperature - 17) << 4)) & 0xF0
+         else
+             MyHVAC.Temp = (~((24 - 17) << 4)) & 0xF0
 
-  switch (swingVCmd)
-  {
-    case VDIR_MANUAL:
-      swingV = MITSUBISHI_HEAVY_ZMP_VS_STOP;
-      break;
-    case VDIR_SWING:
-      swingV = MITSUBISHI_HEAVY_ZMP_VS_SWING;
-      break;
-    case VDIR_UP:
-      swingV = MITSUBISHI_HEAVY_ZMP_VS_UP;
-      break;
-    case VDIR_MUP:
-      swingV = MITSUBISHI_HEAVY_ZMP_VS_MUP;
-      break;
-    case VDIR_MIDDLE:
-      swingV = MITSUBISHI_HEAVY_ZMP_VS_MIDDLE;
-      break;
-    case VDIR_MDOWN:
-      swingV = MITSUBISHI_HEAVY_ZMP_VS_MDOWN;
-      break;
-    case VDIR_DOWN:
-      swingV = MITSUBISHI_HEAVY_ZMP_VS_DOWN;
-      break;	
+         vSwing = self.current_swing_mode.lower()
+         if (vSwing == 'manual')
+	    MyHVAC.VSwing = MyHVAC.HVAC_VSwing.Stop
+         elif (vSwing == 'swing')
+	    MyHVAC.VSwing = MyHVAC.HVAC_VSwing.Swing
+        elif (vSwing == 'up')
+	    MyHVAC.VSwing = MyHVAC.HVAC_VSwing.Up
+        elif (vSwing == 'm-up')
+	    MyHVAC.VSwing = MyHVAC.HVAC_VSwing.MUp
+        elif (vSwing == 'middle')
+	    MyHVAC.VSwing = MyHVAC.HVAC_VSwing.Middle
+        elif (vSwing == 'm-down')
+	    MyHVAC.VSwing = MyHVAC.HVAC_VSwing.MDown
+        elif (vSwing == 'down')
+	    MyHVAC.VSwing = MyHVAC.HVAC_VSwing.Down
 
-	  if section == 'off':
-            value = 'off_command'
-        elif section == 'idle':
-            value = 'idle_command'
-        else: 
-            value = self._current_fan_mode.lower() + "_" + str(int(self._target_temperature)) if not section == 'off' else 'off_command'
-        
-        command = self._commands_ini.get(section, value) #replace this with my code
         
         for retry in range(DEFAULT_RETRY):
             try:
-                payload = b64decode(command)
+                payload = MyHVAC.get_cmd()
                 self._broadlink_device.send_data(payload)
                 break
             except (socket.timeout, ValueError):
@@ -501,6 +470,16 @@ class BroadlinkIRMHIClimate(ClimateDevice):
         return self._operation_list
 
     @property
+    def current_swing(self):
+        """Return current swing ie. up middle down etc."""
+        return self._current_swing
+
+    @property
+    def swing_list(self):
+        """Return the list of available swing modes."""
+        return self._swing_list
+
+    @property
     def current_fan_mode(self):
         """Return the fan setting."""
         return self._current_fan_mode
@@ -538,12 +517,19 @@ class BroadlinkIRMHIClimate(ClimateDevice):
         self.schedule_update_ha_state()
 
     def set_operation_mode(self, operation_mode):
-        """Set new target temperature."""
+        """Set new target Operation."""
         self._current_operation = operation_mode
 
         self.send_ir()
         self.schedule_update_ha_state()
-        
+
+    def set_swing_mode(self, swing_mode):
+        """Set new target Swing."""
+        self._current_swing = swing_mode
+
+        self.send_ir()
+        self.schedule_update_ha_state()
+	
     @asyncio.coroutine
     def async_added_to_hass(self):
         state = yield from async_get_last_state(self.hass, self.entity_id)
@@ -552,6 +538,6 @@ class BroadlinkIRMHIClimate(ClimateDevice):
             self._target_temperature = state.attributes['temperature']
             self._current_operation = state.attributes['operation_mode']
             self._current_fan_mode = state.attributes['fan_mode']
-	    self._current_swing_mode = state.attributes['swing_mode']
+	    self._current_swing = state.attributes['swing_mode']
 
 
