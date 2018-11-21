@@ -397,7 +397,6 @@ class BroadlinkIRMHIClimate(ClimateDevice):
         for retry in range(DEFAULT_RETRY):
             try:
                 payload = MyHVAC.get_cmd()
-                _LOGGER.error("Sending to Broadlink:")
                 self._broadlink_device.send_data(payload)
                 break
             except (socket.timeout, ValueError):
